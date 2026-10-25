@@ -1,50 +1,108 @@
 import re
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Set
 from dataclasses import dataclass, field
 
 @dataclass
 class ExtractedRequirement:
-    requirement_text: str
-    category: str  # programming_language, framework, database, cloud_devops, education, experience, soft_skill, responsibility
-    priority: str  # mandatory, preferred
+    requirement_text: str  # The complete, whole-line requirement statement
+    category: str          # programming_language, framework, database, cloud_devops, education, experience, soft_skill, responsibility
+    priority: str          # mandatory, preferred
     is_inferred: bool
     context_snippet: str
     lexical_keywords: List[str] = field(default_factory=list)
     confidence: float = 0.95
 
 
-# Predefined dictionaries for high-precision technical entity extraction
-KNOWN_TECH_ENTITIES = {
-    "programming_language": [
-        "python", "java", "c\\+\\+", "c#", "typescript", "javascript", "golang", "go",
-        "rust", "ruby", "kotlin", "swift", "scala", "php", "r", "dart", "sql"
-    ],
-    "framework": [
-        "react", "react\\.js", "next\\.js", "vue", "angular", "fastapi", "spring boot",
-        "django", "flask", "express", "express\\.js", "node\\.js", "asp\\.net", "laravel",
-        "tailwind", "bootstrap"
-    ],
-    "database": [
-        "postgresql", "postgres", "mysql", "mongodb", "redis", "cassandra",
-        "dynamodb", "elasticsearch", "sqlite", "oracle", "mariadb"
-    ],
-    "cloud_devops": [
-        "docker", "kubernetes", "k8s", "aws", "gcp", "azure", "ci/cd", "git",
-        "github actions", "jenkins", "terraform", "ansible", "linux"
-    ],
-    "soft_skill": [
-        "communication", "teamwork", "leadership", "agile", "scrum", "problem solving",
-        "critical thinking", "collaboration"
-    ]
-}
-
 PREFERRED_PATTERNS = [
-    r"(?i)\b(?:preferred|nice to have|plus|bonus|good to have|desired|preferred qualifications|optional)\b"
+    r"(?i)\b(?:preferred|nice to have|plus|bonus|good to have|desired|preferred qualifications|optional|asset)\b"
 ]
 
 MANDATORY_PATTERNS = [
-    r"(?i)\b(?:required|must have|minimum|essential|requirements|qualifications|responsibilities|expected to)\b"
+    r"(?i)\b(?:required|must have|minimum|essential|requirements|qualifications|responsibilities|expected to|what you will do|what you need)\b"
 ]
+
+BOILERPLATE_PATTERNS = [
+    r"(?i)\b(?:equal opportunity|affirmative action|benefits|health insurance|dental|vision|401k|pto|vacation|salary|compensation|perks|commute|hybrid schedule|apply now|about the company|who we are|location:)\b"
+]
+
+# Patterns for identifying multi-entity compound lines that should be split into distinct whole-statement requirements
+KNOWN_TECH_ENTITIES_WITH_NAMES = [
+    ("programming_language", [
+        (r"\bpython\b", "Python"),
+        (r"\bjava\b", "Java"),
+        (r"\bc\+\+\b", "C++"),
+        (r"\bc#\b", "C#"),
+        (r"\bgolang\b|\bgo\b", "Golang"),
+        (r"\brust\b", "Rust"),
+        (r"\btypescript\b", "TypeScript"),
+        (r"\bjavascript\b", "JavaScript"),
+        (r"\bruby\b", "Ruby"),
+        (r"\bkotlin\b", "Kotlin"),
+        (r"\bswift\b", "Swift"),
+        (r"\bscala\b", "Scala"),
+        (r"\bphp\b", "PHP"),
+        (r"\bsql\b", "SQL"),
+    ]),
+    ("framework", [
+        (r"\breact(?:\.js)?\b", "React"),
+        (r"\bnext(?:\.js)?\b", "Next.js"),
+        (r"\bvue(?:\.js)?\b", "Vue"),
+        (r"\bangular\b", "Angular"),
+        (r"\bfastapi\b", "FastAPI"),
+        (r"\bspring boot\b", "Spring Boot"),
+        (r"\bdjango\b", "Django"),
+        (r"\bflask\b", "Flask"),
+        (r"\bexpress(?:\.js)?\b", "Express.js"),
+        (r"\bnode(?:\.js)?\b", "Node.js"),
+        (r"\basp\.net\b", "ASP.NET"),
+        (r"\blaravel\b", "Laravel"),
+        (r"\btailwind\b", "Tailwind CSS"),
+    ]),
+    ("database", [
+        (r"\bpostgresql\b|\bpostgres\b", "PostgreSQL"),
+        (r"\bmysql\b", "MySQL"),
+        (r"\bmongodb\b|\bmongo\b", "MongoDB"),
+        (r"\bredis\b", "Redis"),
+        (r"\bcassandra\b", "Cassandra"),
+        (r"\bdynamodb\b", "DynamoDB"),
+        (r"\belasticsearch\b", "Elasticsearch"),
+        (r"\bsqlite\b", "SQLite"),
+        (r"\boracle\b", "Oracle DB"),
+    ]),
+    ("cloud_devops", [
+        (r"\bdocker\b", "Docker"),
+        (r"\bkubernetes\b|\bk8s\b", "Kubernetes"),
+        (r"\baws\b", "AWS"),
+        (r"\bgcp\b|\bgoogle cloud\b", "Google Cloud"),
+        (r"\bazure\b", "Azure"),
+        (r"\bci/cd\b", "CI/CD"),
+        (r"\bgit\b", "Git"),
+        (r"\bgithub actions\b", "GitHub Actions"),
+        (r"\bjenkins\b", "Jenkins"),
+        (r"\bterraform\b", "Terraform"),
+        (r"\bansible\b", "Ansible"),
+        (r"\blinux\b", "Linux"),
+    ])
+]
+
+# Patterns for assigning domain categories to full lines
+CATEGORY_PATTERNS = [
+    (r"(?i)\b(?:degree|bachelor'?s|master'?s|b\.?tech|b\.?e\.?|m\.?tech|phd|diploma|computer science|engineering field)\b", "education"),
+    (r"(?i)\b(?:\d+\+?\s*(?:-\s*\d+)?\s*(?:years?|yrs?)|prior experience|work history|track record)\b", "experience"),
+    (r"(?i)\b(?:python|java\b|c\+\+|c#|golang|rust|typescript|javascript|ruby|kotlin|swift|scala|php|sql\b)\b", "programming_language"),
+    (r"(?i)\b(?:react|next\.?js|vue|angular|fastapi|spring boot|django|flask|express|node\.?js|asp\.net|laravel|tailwind)\b", "framework"),
+    (r"(?i)\b(?:postgresql|postgres|mysql|mongodb|redis|cassandra|dynamodb|elasticsearch|oracle|sqlite|rdbms|nosql)\b", "database"),
+    (r"(?i)\b(?:docker|kubernetes|k8s|aws|gcp|azure|ci/cd|git\b|github actions|jenkins|terraform|ansible|linux|devops)\b", "cloud_devops"),
+    (r"(?i)\b(?:communication|teamwork|leadership|agile|scrum|problem solving|critical thinking|collaboration|client-facing|stakeholder)\b", "soft_skill"),
+]
+
+def clean_requirement_line(line: str) -> str:
+    """Removes bullet markers, numbering, and trailing punctuation while preserving the whole statement."""
+    cleaned = re.sub(r"^[\s\-*•>#]+", "", line).strip()
+    cleaned = re.sub(r"^\d+[\.\)]\s*", "", cleaned).strip()
+    cleaned = re.sub(r"^[a-zA-Z][\.\)]\s*", "", cleaned).strip()
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
 
 class JobDescriptionParserService:
     def __init__(self):
@@ -52,7 +110,8 @@ class JobDescriptionParserService:
 
     def parse_job_description(self, raw_text: str) -> List[ExtractedRequirement]:
         """
-        Parses raw job description text into categorized, prioritized, and context-linked requirements.
+        Parses raw job description text into complete whole-line requirement statements.
+        Preserves the entire sentence meaning, verbs, context, and qualifications instead of isolated words.
         """
         if not raw_text or len(raw_text.strip()) < 20:
             return []
@@ -64,99 +123,135 @@ class JobDescriptionParserService:
         extracted: List[ExtractedRequirement] = []
         seen_requirements = set()
 
-        # Phase 1: Section-aware line analysis
         for line in lines:
             line_lower = line.lower()
-            
-            # Check if section header changes default priority
-            if any(re.search(p, line_lower) for p in PREFERRED_PATTERNS):
+
+            # Check if line is a section heading altering default priority
+            if any(re.search(p, line_lower) for p in PREFERRED_PATTERNS) and len(line) < 60:
                 current_priority = "preferred"
-            elif any(re.search(p, line_lower) for p in MANDATORY_PATTERNS) and "preferred" not in line_lower:
+                continue
+            elif any(re.search(p, line_lower) for p in MANDATORY_PATTERNS) and "preferred" not in line_lower and len(line) < 60:
                 current_priority = "mandatory"
+                continue
 
-            # Check if line looks like an experience requirement
-            exp_match = re.search(r"(\d+\+?\s*(?:-\s*\d+)?\s*(?:years?|yrs?)(?:\s+of)?(?:\s+experience)?[^.\n]*)", line, re.IGNORECASE)
-            if exp_match:
-                req_text = exp_match.group(1).strip()
-                if len(req_text) > 5 and req_text.lower() not in seen_requirements:
-                    seen_requirements.add(req_text.lower())
+            # Skip boilerplate administrative statements
+            if any(re.search(p, line_lower) for p in BOILERPLATE_PATTERNS) and len(line) > 20:
+                continue
+
+            # Skip job metadata lines (e.g. Job Title:, Role:, Company:, Location:)
+            if any(line_lower.startswith(p) for p in ["job title:", "title:", "role:", "company:", "location:", "department:"]):
+                continue
+
+            # Clean bullet and formatting
+            clean_stmt = clean_requirement_line(line)
+            is_bullet = line.startswith(("-", "*", "•", ">")) or bool(re.match(r"^\d+[\.\)]", line))
+            min_len = 3 if is_bullet else 15
+
+            if len(clean_stmt) < min_len or len(clean_stmt) > 350:
+                continue
+
+            # Determine if this line expresses a requirement or responsibility
+            has_action_or_qualification = any(
+                w in line_lower for w in [
+                    "experience", "knowledge", "proficiency", "proficient", "familiarity",
+                    "degree", "ability", "responsible", "design", "build", "develop", "lead",
+                    "manage", "implement", "create", "collaborate", "ensure", "maintain",
+                    "drive", "deploy", "architect", "skills", "understanding", "hands-on", "working with",
+                    "qualifications", "requirements", "familiar"
+                ]
+            )
+
+            # Skip general uninformative introductory sentences if not a bullet
+            if not is_bullet and not has_action_or_qualification:
+                continue
+
+            # Assign priority for this line
+            line_priority = current_priority
+            if any(re.search(p, line_lower) for p in PREFERRED_PATTERNS):
+                line_priority = "preferred"
+
+            # Check if line contains multiple distinct entity qualifications from DIFFERENT categories
+            # e.g., "Proficiency in Python and PostgreSQL" or "Experience with Kubernetes and React"
+            entity_matches = []
+            for cat, items in KNOWN_TECH_ENTITIES_WITH_NAMES:
+                for pat, name in items:
+                    m = re.search(pat, line_lower)
+                    if m:
+                        entity_matches.append((cat, name, m.start()))
+
+            distinct_cats = {m[0] for m in entity_matches}
+            is_compound_line = len(distinct_cats) > 1 and (" and " in clean_stmt.lower() or "," in clean_stmt)
+
+            if is_compound_line:
+                # Extract prefix like 'Proficiency in' or 'Experience with'
+                prefix_match = re.match(
+                    r"^(proficiency in|experience with|hands-on experience with|familiarity with|knowledge of|working with)\s+",
+                    clean_stmt,
+                    re.I
+                )
+                prefix = prefix_match.group(0).strip() if prefix_match else "Experience with"
+
+                for cat, ent_name, _ in entity_matches:
+                    sub_stmt = f"{prefix} {ent_name}"
+                    dedup_key = sub_stmt.lower()
+                    if dedup_key in seen_requirements:
+                        continue
+                    seen_requirements.add(dedup_key)
+
+                    words = re.findall(r"\b[A-Za-z0-9+#.-]{3,}\b", sub_stmt.lower())
+                    keywords = [w for w in words if w not in {"with", "and", "the", "for", "from", "that", "this", "have", "been", "using", "will", "must", "your", "such"}][:8]
+
                     extracted.append(ExtractedRequirement(
-                        requirement_text=line.strip(" -*•"),
-                        category="experience",
-                        priority=current_priority,
+                        requirement_text=sub_stmt,
+                        category=cat,
+                        priority=line_priority,
                         is_inferred=False,
-                        context_snippet=line,
-                        lexical_keywords=["experience", "years"],
+                        context_snippet=clean_stmt,
+                        lexical_keywords=keywords,
                         confidence=0.95
                     ))
+            else:
+                # Deduplicate similar statements
+                dedup_key = clean_stmt[:50].lower()
+                if dedup_key in seen_requirements:
                     continue
+                seen_requirements.add(dedup_key)
 
-            # Check if line is an education requirement
-            edu_match = re.search(r"\b(?:bachelor'?s|master'?s|b\.?tech|b\.?e\.?|m\.?tech|phd|degree in (?:computer science|engineering|related field))\b", line_lower)
-            if edu_match:
-                if "education" not in seen_requirements:
-                    seen_requirements.add("education")
-                    extracted.append(ExtractedRequirement(
-                        requirement_text=line.strip(" -*•"),
-                        category="education",
-                        priority=current_priority,
-                        is_inferred=False,
-                        context_snippet=line,
-                        lexical_keywords=["degree", "computer science", "bachelor"],
-                        confidence=0.95
-                    ))
-                    continue
+                # Assign category based on whole line content
+                category = "responsibility"
+                for cat_pattern, cat_name in CATEGORY_PATTERNS:
+                    if re.search(cat_pattern, line_lower):
+                        category = cat_name
+                        break
 
-            # Check known technical entities in this line
-            line_has_entity = False
-            for cat, entities in KNOWN_TECH_ENTITIES.items():
-                for ent_pattern in entities:
-                    pattern = rf"\b{ent_pattern}\b"
-                    match = re.search(pattern, line_lower)
-                    if match:
-                        display_name = ent_pattern.replace("\\", "").title()
-                        if display_name.lower() in ["c++", "c#", "ci/cd"]:
-                            display_name = ent_pattern.replace("\\", "").upper()
-                        elif display_name.lower() in ["react.js", "next.js", "node.js"]:
-                            display_name = ent_pattern.replace("\\", "")
+                words = re.findall(r"\b[A-Za-z0-9+#.-]{3,}\b", clean_stmt.lower())
+                keywords = [w for w in words if w not in {"with", "and", "the", "for", "from", "that", "this", "have", "been", "using", "will", "must", "your", "such"}][:8]
 
-                        key = f"{cat}:{display_name.lower()}"
-                        if key not in seen_requirements:
-                            seen_requirements.add(key)
-                            line_has_entity = True
-                            
-                            # Determine priority for this specific requirement
-                            item_priority = current_priority
-                            if any(re.search(p, line_lower) for p in PREFERRED_PATTERNS):
-                                item_priority = "preferred"
+                extracted.append(ExtractedRequirement(
+                    requirement_text=clean_stmt,  # THE COMPLETE WHOLE STATEMENT
+                    category=category,
+                    priority=line_priority,
+                    is_inferred=False,
+                    context_snippet=clean_stmt,
+                    lexical_keywords=keywords,
+                    confidence=0.95
+                ))
 
-                            extracted.append(ExtractedRequirement(
-                                requirement_text=display_name,
-                                category=cat,
-                                priority=item_priority,
-                                is_inferred=False,
-                                context_snippet=line.strip(" -*•"),
-                                lexical_keywords=[display_name.lower()],
-                                confidence=0.98
-                            ))
+            if len(extracted) >= 20:
+                break
 
-            # If line is a bullet item that looks like a concrete role responsibility
-            if not line_has_entity and (line.startswith("-") or line.startswith("*") or line.startswith("•")) and len(line) > 30:
-                clean_bullet = line.strip(" -*•")
-                bullet_lower = clean_bullet.lower()
-                # Exclude purely administrative / company perk sentences
-                if not any(k in bullet_lower for k in ["salary", "equity", "health insurance", "401k", "perks", "equal opportunity"]):
-                    key = f"responsibility:{clean_bullet[:40].lower()}"
-                    if key not in seen_requirements and len(seen_requirements) < 25:
-                        seen_requirements.add(key)
-                        extracted.append(ExtractedRequirement(
-                            requirement_text=clean_bullet,
-                            category="responsibility",
-                            priority=current_priority,
-                            is_inferred=False,
-                            context_snippet=clean_bullet,
-                            lexical_keywords=re.findall(r"\b[A-Za-z]{4,}\b", clean_bullet)[:5],
-                            confidence=0.85
-                        ))
+        # Fallback if no structured lines were matched (e.g. single block of text)
+        if not extracted:
+            sentences = [s.strip() for s in re.split(r"[.\n]", cleaned_text) if len(s.strip()) > 20]
+            for s in sentences[:8]:
+                extracted.append(ExtractedRequirement(
+                    requirement_text=s,
+                    category="responsibility",
+                    priority="mandatory",
+                    is_inferred=False,
+                    context_snippet=s,
+                    lexical_keywords=re.findall(r"\b[A-Za-z]{4,}\b", s.lower())[:6],
+                    confidence=0.80
+                ))
 
         return extracted

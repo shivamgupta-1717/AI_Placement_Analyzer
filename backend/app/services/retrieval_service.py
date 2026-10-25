@@ -18,17 +18,7 @@ class RetrievedEvidence:
     has_lexical_match: bool
 
 
-# Generic words that do NOT identify a specific skill and must not trigger false positive matches
-# (e.g. "development" in "business development" vs "full stack development")
-GENERIC_HEAD_WORDS: Set[str] = {
-    "development", "developer", "engineer", "engineering", "manager", "management",
-    "lead", "leader", "leadership", "specialist", "consultant", "services", "solutions",
-    "operations", "analyst", "analytics", "design", "designer", "testing", "tester",
-    "architecture", "architect", "support", "administrator", "administration", "skills",
-    "experience", "technologies", "knowledge", "role", "work", "system", "systems",
-    "stack", "building", "built", "implemented", "application", "applications", "project",
-    "projects", "tool", "tools", "team", "teams", "practice", "practices"
-}
+from app.services.grounded_generation import GENERIC_FUNCTIONAL_HEAD_WORDS as GENERIC_HEAD_WORDS
 
 STOPWORDS: Set[str] = {
     "and", "the", "for", "with", "must", "have", "preferred", "years", "degree",

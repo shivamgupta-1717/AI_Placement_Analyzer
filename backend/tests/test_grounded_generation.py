@@ -43,17 +43,16 @@ def test_demonstrated_skill_with_lexical_evidence(service):
 
 def test_business_dev_vs_full_stack_dev_semantic_disambiguation(service):
     """
-    CRITICAL TEST: Ensures 'Business Development' in JD is NOT matched to
+    Ensures 'Business Development' in JD is NOT matched to
     'Full Stack Development' in the resume merely due to the word 'Development'.
     """
-    # Suppose retrieval returned a technical chunk mentioning full stack development
     ev = RetrievedEvidence(
         chunk_id="c_tech",
         snippet="Experienced in Full Stack Web Development using React, Node.js, and TypeScript.",
         section_name="Experience",
         page_number=1,
         vector_score=0.45,
-        lexical_score=0.0, # 'development' is generic, so distinctive 'business' had 0 lexical match
+        lexical_score=0.0,
         combined_score=0.45,
         has_lexical_match=False
     )
@@ -65,9 +64,85 @@ def test_business_dev_vs_full_stack_dev_semantic_disambiguation(service):
         retrieved_evidence=[ev]
     )
 
-    # Must be 'Not found in resume' - never 'Demonstrated'!
     assert result.classification == "Not found in resume"
-    assert "distinct domain" in result.reasoning or "lacks the specific core qualifier" in result.reasoning or "business development" in result.reasoning.lower()
+    assert "domain" in result.reasoning.lower()
+
+def test_financial_management_vs_state_management_disambiguation(service):
+    """
+    Ensures 'Corporate Financial Management' in JD is NOT matched to
+    'State management in React with Redux' merely due to the word 'management'.
+    """
+    ev = RetrievedEvidence(
+        chunk_id="c_react",
+        snippet="Implemented complex state management in React using Redux Toolkit.",
+        section_name="Experience",
+        page_number=1,
+        vector_score=0.40,
+        lexical_score=0.0,
+        combined_score=0.40,
+        has_lexical_match=False
+    )
+
+    result = service.assess_requirement(
+        requirement_text="Corporate Financial Management and Budgeting",
+        category="responsibility",
+        priority="mandatory",
+        retrieved_evidence=[ev]
+    )
+
+    assert result.classification == "Not found in resume"
+    assert "domain" in result.reasoning.lower()
+
+def test_network_design_vs_graphic_design_disambiguation(service):
+    """
+    Ensures 'Computer Network and Infrastructure Design' in JD is NOT matched to
+    'Graphic design and UI wireframes' merely due to the word 'design'.
+    """
+    ev = RetrievedEvidence(
+        chunk_id="c_design",
+        snippet="Graphic designer creating marketing banners, flyers, and Figma UI prototypes.",
+        section_name="Experience",
+        page_number=1,
+        vector_score=0.40,
+        lexical_score=0.0,
+        combined_score=0.40,
+        has_lexical_match=False
+    )
+
+    result = service.assess_requirement(
+        requirement_text="Computer Network and Infrastructure Design",
+        category="cloud_devops",
+        priority="mandatory",
+        retrieved_evidence=[ev]
+    )
+
+    assert result.classification == "Not found in resume"
+    assert "domain" in result.reasoning.lower()
+
+def test_genuine_whole_line_demonstrated_match(service):
+    """
+    Verifies that a genuine whole-statement match correctly evaluates to Demonstrated.
+    """
+    ev = RetrievedEvidence(
+        chunk_id="c_api",
+        snippet="Architected and built RESTful backend APIs with FastAPI and PostgreSQL.",
+        section_name="Experience",
+        page_number=1,
+        vector_score=0.90,
+        lexical_score=0.90,
+        combined_score=0.92,
+        has_lexical_match=True
+    )
+
+    result = service.assess_requirement(
+        requirement_text="Design, build, and maintain high-throughput backend APIs with FastAPI and PostgreSQL",
+        category="framework",
+        priority="mandatory",
+        retrieved_evidence=[ev]
+    )
+
+    assert result.classification == "Demonstrated"
+    assert result.is_verified_in_source is True
 
 def test_citation_grounding_verification():
     source_chunks = [
