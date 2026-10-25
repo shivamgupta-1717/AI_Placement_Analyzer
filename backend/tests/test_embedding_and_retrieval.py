@@ -35,7 +35,6 @@ def test_retrieval_relevance_and_filtering(test_db):
     embed_svc = EmbeddingService(dimension=768)
     retrieval_svc = RetrievalService(db=test_db, embedding_service=embed_svc)
 
-    # Insert test resume & chunks
     resume = Resume(
         id="res-1",
         filename="john_doe.pdf",
@@ -68,7 +67,6 @@ def test_retrieval_relevance_and_filtering(test_db):
     test_db.add_all([chunk1, chunk2])
     test_db.commit()
 
-    # Query for Python requirement
     results = retrieval_svc.retrieve_evidence_for_requirement(
         resume_id="res-1",
         requirement_text="Python",
@@ -80,12 +78,51 @@ def test_retrieval_relevance_and_filtering(test_db):
     assert results[0].chunk_id == "c1"
     assert results[0].has_lexical_match is True
 
-    # Irrelevant query should not retrieve hiking for Docker
     docker_results = retrieval_svc.retrieve_evidence_for_requirement(
         resume_id="res-1",
         requirement_text="Docker Containerization Kubernetes",
         lexical_keywords=["docker", "kubernetes"],
         threshold=0.45
     )
-    # Hiking chunk must be filtered out by threshold
     assert all(r.chunk_id != "c2" for r in docker_results)
+
+def test_retrieval_does_not_lexically_match_on_generic_word_development(test_db):
+    """
+    Verifies that 'Business Development' query does NOT get has_lexical_match=True
+    against a chunk that only mentions 'Full Stack Development'.
+    """
+    embed_svc = EmbeddingService(dimension=768)
+    retrieval_svc = RetrievalService(db=test_db, embedding_service=embed_svc)
+
+    resume = Resume(
+        id="res-fullstack",
+        filename="fullstack_resume.pdf",
+        file_type="application/pdf",
+        file_size=1024,
+        extracted_text="Full Stack Web Development intern."
+    )
+    test_db.add(resume)
+
+    chunk = ResumeChunk(
+        id="c_fs",
+        resume_id="res-fullstack",
+        chunk_index=0,
+        section_name="Experience",
+        page_number=1,
+        content="Full Stack Web Development intern working on React and Node.js.",
+        token_count=11,
+        embedding=embed_svc.get_embedding("Full Stack Web Development intern working on React and Node.js.")
+    )
+    test_db.add(chunk)
+    test_db.commit()
+
+    results = retrieval_svc.retrieve_evidence_for_requirement(
+        resume_id="res-fullstack",
+        requirement_text="Business Development",
+        category="soft_skill"
+    )
+
+    # Even if retrieved as candidate, has_lexical_match MUST be False because 'business' is missing!
+    for r in results:
+        assert r.has_lexical_match is False
+        assert r.lexical_score == 0.0

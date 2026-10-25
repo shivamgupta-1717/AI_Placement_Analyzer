@@ -1,5 +1,5 @@
 import re
-from typing import List, Optional
+from typing import List, Optional, Set
 from dataclasses import dataclass
 from sqlalchemy.orm import Session
 from app.models.resume import ResumeChunk
@@ -18,6 +18,24 @@ class RetrievedEvidence:
     has_lexical_match: bool
 
 
+# Generic words that do NOT identify a specific skill and must not trigger false positive matches
+# (e.g. "development" in "business development" vs "full stack development")
+GENERIC_HEAD_WORDS: Set[str] = {
+    "development", "developer", "engineer", "engineering", "manager", "management",
+    "lead", "leader", "leadership", "specialist", "consultant", "services", "solutions",
+    "operations", "analyst", "analytics", "design", "designer", "testing", "tester",
+    "architecture", "architect", "support", "administrator", "administration", "skills",
+    "experience", "technologies", "knowledge", "role", "work", "system", "systems",
+    "stack", "building", "built", "implemented", "application", "applications", "project",
+    "projects", "tool", "tools", "team", "teams", "practice", "practices"
+}
+
+STOPWORDS: Set[str] = {
+    "and", "the", "for", "with", "must", "have", "preferred", "years", "degree",
+    "from", "that", "this", "been", "using", "able", "such", "well", "plus", "bonus",
+    "about", "into", "over", "after", "before", "between", "under", "above"
+}
+
 class RetrievalService:
     def __init__(self, db: Session, embedding_service: Optional[EmbeddingService] = None):
         self.db = db
@@ -34,9 +52,9 @@ class RetrievalService:
     ) -> List[RetrievedEvidence]:
         """
         Retrieves top relevant resume chunks for a job requirement using hybrid
-        (vector cosine + exact keyword) search, with relevance threshold filtering.
+        (vector cosine + whole-phrase/distinctive-modifier lexical) search,
+        with semantic disambiguation and relevance threshold filtering.
         """
-        # Fetch chunks for this resume
         chunks = self.db.query(ResumeChunk).filter(ResumeChunk.resume_id == resume_id).all()
         if not chunks:
             return []
@@ -44,17 +62,18 @@ class RetrievalService:
         # Generate query embedding for requirement
         query_vec = self.embedding_service.get_embedding(requirement_text)
 
-        # Build keywords list for lexical matching
-        keywords = set()
-        if lexical_keywords:
-            for kw in lexical_keywords:
-                if len(kw.strip()) > 1:
-                    keywords.add(kw.strip().lower())
-        
-        # Add primary requirement words
-        for token in re.findall(r"\b[A-Za-z0-9+#.-]{2,}\b", requirement_text):
-            if token.lower() not in {"and", "the", "for", "with", "must", "have", "preferred", "years", "degree"}:
-                keywords.add(token.lower())
+        # Clean normalized requirement phrase
+        clean_req_phrase = requirement_text.lower().strip()
+
+        # Extract all tokens from requirement
+        raw_tokens = re.findall(r"\b[A-Za-z0-9+#.-]{2,}\b", clean_req_phrase)
+        content_tokens = [t for t in raw_tokens if t not in STOPWORDS]
+
+        # Extract DISTINCTIVE non-generic tokens (the critical modifiers, e.g. "business" in "business development")
+        distinctive_tokens = [t for t in content_tokens if t not in GENERIC_HEAD_WORDS]
+        # If all tokens were in generic head words (e.g. single word "Architecture"), keep them
+        if not distinctive_tokens and content_tokens:
+            distinctive_tokens = content_tokens
 
         candidates: List[RetrievedEvidence] = []
 
@@ -64,20 +83,41 @@ class RetrievalService:
             vec_score = 0.0
             if chunk_vec:
                 vec_score = self.embedding_service.cosine_similarity(query_vec, chunk_vec)
-                # Bound between 0 and 1
                 vec_score = max(0.0, min(1.0, (vec_score + 1.0) / 2.0))
 
-            # 2. Lexical exact match check
+            # 2. Precise Whole-Phrase & Distinctive Lexical Match Check
             chunk_lower = chunk.content.lower()
-            matched_keywords = [kw for kw in keywords if re.search(rf"\b{re.escape(kw)}\b", chunk_lower)]
-            
-            lex_score = 0.0
-            has_exact = False
-            if matched_keywords:
-                has_exact = True
-                lex_score = min(1.0, len(matched_keywords) / max(1, len(keywords)))
 
-            # Section boost (e.g. if category is programming_language and section is Skills)
+            # Check A: Exact continuous phrase match (e.g. "business development" in chunk)
+            exact_phrase_match = bool(re.search(rf"\b{re.escape(clean_req_phrase)}\b", chunk_lower))
+
+            # Check B: Distinctive modifiers match
+            # To prevent "business development" from matching "full stack development",
+            # ALL distinctive modifiers of the requirement MUST be present in the chunk!
+            matched_distinctive = [t for t in distinctive_tokens if re.search(rf"\b{re.escape(t)}\b", chunk_lower)]
+            all_distinctive_matched = len(distinctive_tokens) > 0 and (len(matched_distinctive) == len(distinctive_tokens))
+
+            # Partial distinctive match ratio
+            distinctive_ratio = (len(matched_distinctive) / len(distinctive_tokens)) if distinctive_tokens else 0.0
+
+            has_exact = False
+            lex_score = 0.0
+
+            if exact_phrase_match:
+                has_exact = True
+                lex_score = 1.0
+            elif all_distinctive_matched:
+                has_exact = True
+                lex_score = 0.9
+            elif distinctive_ratio >= 0.5 and len(distinctive_tokens) > 1:
+                # E.g. 2 out of 3 distinctive words matched
+                lex_score = 0.5
+            else:
+                # Merely matching generic words like "development" or "engineer" gives 0.0 lexical score
+                lex_score = 0.0
+                has_exact = False
+
+            # Section boost (e.g. programming_language in Skills section)
             section_boost = 0.0
             if category and chunk.section_name:
                 sec_lower = chunk.section_name.lower()
@@ -96,10 +136,9 @@ class RetrievalService:
             )
 
             # Filter out weak/irrelevant noise:
-            # Keep if there's an exact lexical match OR combined score passes threshold
+            # Keep if there's an authentic lexical match OR combined score passes threshold
             if has_exact or comb_score >= threshold:
-                # Find best snippet inside chunk
-                snippet = self._extract_best_snippet(chunk.content, matched_keywords, requirement_text)
+                snippet = self._extract_best_snippet(chunk.content, matched_distinctive, clean_req_phrase)
                 candidates.append(RetrievedEvidence(
                     chunk_id=chunk.id,
                     snippet=snippet,
@@ -111,21 +150,30 @@ class RetrievalService:
                     has_lexical_match=has_exact
                 ))
 
-        # Sort descending by combined score
         candidates.sort(key=lambda x: x.combined_score, reverse=True)
         return candidates[:top_k]
 
-    def _extract_best_snippet(self, chunk_text: str, matched_keywords: List[str], requirement_text: str) -> str:
+    def _extract_best_snippet(self, chunk_text: str, matched_keywords: List[str], requirement_phrase: str) -> str:
         """Extracts the most relevant 1-2 sentences containing evidence from the chunk."""
         sentences = [s.strip() for s in re.split(r"[.\n]", chunk_text) if s.strip()]
         if not sentences:
             return chunk_text[:200]
 
-        # Prioritize sentence with matched keywords
+        # Prioritize exact phrase
         for sentence in sentences:
-            s_lower = sentence.lower()
-            if any(re.search(rf"\b{re.escape(kw)}\b", s_lower) for kw in matched_keywords):
+            if re.search(rf"\b{re.escape(requirement_phrase)}\b", sentence.lower()):
                 return sentence.strip()
 
-        # Fallback to first informative sentence
+        # Prioritize sentence with matched distinctive keywords
+        if matched_keywords:
+            for sentence in sentences:
+                s_lower = sentence.lower()
+                if all(re.search(rf"\b{re.escape(kw)}\b", s_lower) for kw in matched_keywords):
+                    return sentence.strip()
+
+            for sentence in sentences:
+                s_lower = sentence.lower()
+                if any(re.search(rf"\b{re.escape(kw)}\b", s_lower) for kw in matched_keywords):
+                    return sentence.strip()
+
         return sentences[0][:200]
