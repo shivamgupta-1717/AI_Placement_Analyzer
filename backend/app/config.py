@@ -1,7 +1,8 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 import os
+import json
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Placement Analyzer"
@@ -30,12 +31,27 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
 
     # CORS
-    CORS_ORIGINS: List[str] = [
+    CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000"
     ]
+
+    @field_validator("CORS_ORIGINS", mode="after")
+    @classmethod
+    def assemble_cors_origins(cls, v: Union[List[str], str]) -> List[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            if "," in v:
+                return [origin.strip() for origin in v.split(",") if origin.strip()]
+            return [v] if v else ["*"]
+        return v
 
     # File uploads
     UPLOAD_MAX_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10MB
