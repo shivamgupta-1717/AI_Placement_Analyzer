@@ -8,8 +8,13 @@ import {
   HealthStatus
 } from '../types';
 
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE_URL = rawBaseUrl
+  ? (rawBaseUrl.endsWith('/api') ? rawBaseUrl : `${rawBaseUrl.replace(/\/+$/, '')}/api`)
+  : '/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -74,6 +79,9 @@ export const getLatestEvaluation = async (): Promise<EvaluationRun> => {
 
 export const getHealth = async (): Promise<HealthStatus> => {
   const response = await api.get<HealthStatus>('/health');
+  if (!response.data || typeof response.data !== 'object' || !response.data.llm_provider) {
+    throw new Error('Invalid health response format');
+  }
   return response.data;
 };
 

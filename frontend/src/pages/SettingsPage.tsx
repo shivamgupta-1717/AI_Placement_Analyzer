@@ -47,7 +47,9 @@ export const SettingsPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
               <strong className="text-sm text-slate-900">
-                {health ? `${health.llm_provider.toUpperCase()} (${health.llm_model})` : 'Loading...'}
+                {health && typeof health === 'object' && health.llm_provider
+                  ? `${(health.llm_provider || '').toUpperCase()} (${health.llm_model || 'default'})`
+                  : 'Connecting / Offline Mode'}
               </strong>
             </div>
             <p className="text-[11px] text-slate-500 mt-2">
@@ -62,7 +64,9 @@ export const SettingsPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <Database className="w-4 h-4 text-indigo-600" />
               <strong className="text-sm text-slate-900">
-                {health ? `${health.database_url} (${health.embedding_dimension}-dim)` : 'Loading...'}
+                {health && typeof health === 'object' && health.database_url
+                  ? `${health.database_url} (${health.embedding_dimension || 768}-dim)`
+                  : 'SQLite / Embedded Vectors'}
               </strong>
             </div>
             <p className="text-[11px] text-slate-500 mt-2">

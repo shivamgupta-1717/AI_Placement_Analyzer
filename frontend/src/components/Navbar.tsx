@@ -69,10 +69,10 @@ export const Navbar: React.FC = () => {
 
         {/* Status indicator */}
         <div className="flex items-center gap-3">
-          {health && (
+          {health && typeof health === 'object' && health.llm_provider && (
             <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>{health.llm_provider.toUpperCase()} Mode</span>
+              <span>{(health.llm_provider || 'ONLINE').toUpperCase()} Mode</span>
             </div>
           )}
 

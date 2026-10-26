@@ -366,7 +366,7 @@ export const AnalysisResultsPage: React.FC = () => {
                       Q{idx + 1}
                     </span>
                     <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase tracking-wide">
-                      {q.category.replace('_', ' ')}
+                      {(q.category || '').replace('_', ' ')}
                     </span>
                     <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
                       q.difficulty === 'hard'
@@ -375,12 +375,12 @@ export const AnalysisResultsPage: React.FC = () => {
                         ? 'bg-amber-50 text-amber-700 border border-amber-200'
                         : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                     }`}>
-                      {q.difficulty.toUpperCase()}
+                      {(q.difficulty || 'medium').toUpperCase()}
                     </span>
                   </div>
 
                   <span className="text-[11px] text-slate-400 italic">
-                    Source: {q.source_type.replace('_', ' ')}
+                    Source: {(q.source_type || '').replace('_', ' ')}
                   </span>
                 </div>
 

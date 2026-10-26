@@ -62,7 +62,7 @@ export const SkillGapCard: React.FC<SkillGapCardProps> = ({ assessment }) => {
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="font-semibold text-slate-900 text-base">{assessment.requirement_text}</h4>
             <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 uppercase tracking-wide">
-              {assessment.category.replace('_', ' ')}
+              {(assessment.category || '').replace('_', ' ')}
             </span>
             <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
               assessment.priority === 'mandatory' 
